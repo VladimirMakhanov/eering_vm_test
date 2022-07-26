@@ -43,7 +43,7 @@ class TestCreateEventStream:
             )
 
 
-class TestMappingEventStream:
+class TestMappingAndRemoveEventStream:
     data = {
         "event_timestamp": {
             0: Timestamp("2022-07-26 19:50:00.321015"),
@@ -208,7 +208,8 @@ class TestMappingEventStream:
             {"field_name": "utm_medium", "action": "eq", "value": "social"},
         ]
         event_action = {"field_name": "event", "value": "mobile social"}
-        es.transform(filter=event_filter, action=event_action)
+        es.transform(mapping=event_filter, action=event_action)
+        assert isinstance(es.get_dataframe(), pd.DataFrame), "Not correct type"
         assert len(es.get_dataframe()) == 15, "Incorrect length of dataframe"
         assert (
             len(es.get_dataframe().loc[es.get_dataframe()["event"] == "mobile social"]) == 6
@@ -223,7 +224,7 @@ class TestMappingEventStream:
         ]
         event_action = {"field_name": "event", "value": "mobile social"}
         with pytest.raises(ValueError):
-            es.transform(filter=event_filter, action=event_action)
+            es.transform(mapping=event_filter, action=event_action)
 
     def test_incorrect_filter_operation(self) -> None:
         data = pd.DataFrame(data=self.data)
@@ -234,13 +235,22 @@ class TestMappingEventStream:
         ]
         event_action = {"field_name": "event", "value": "mobile social"}
         with pytest.raises(ValueError):
-            es.transform(filter=event_filter, action=event_action)
+            es.transform(mapping=event_filter, action=event_action)
 
     def test_startswith(self) -> None:
         data = pd.DataFrame(data=self.data)
         es = Eventstream(dataset=data, source_schema=list(data.keys()), schema=["event_timestamp", "user_id", "event"])
         event_filter = [{"field_name": "page", "action": "startswith", "value": "catalog"}]
         event_action = {"field_name": "event", "value": "catalog"}
-        es.transform(filter=event_filter, action=event_action)
+        es.transform(mapping=event_filter, action=event_action)
         assert len(es.get_dataframe()) == 15, "Incorrect length of dataframe"
         assert len(es.get_dataframe().loc[es.get_dataframe()["event"] == "catalog"]) == 5, "Not all rows was affected"
+
+    def test_remove_rows(self) -> None:
+        data = pd.DataFrame(data=self.data)
+        es = Eventstream(dataset=data, source_schema=list(data.keys()), schema=["event_timestamp", "user_id", "event"])
+        remove_filter = [{"field_name": "page", "action": "startswith", "value": "catalog"}]
+        es.remove_rows(remove_rules=remove_filter)
+        assert len(es.get_dataframe()) == 10, "Not all rows was removed"
+        es.restore_removed_rows()
+        assert len(es.get_dataframe()) == 15, "Not all rows was restored"

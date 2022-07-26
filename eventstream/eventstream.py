@@ -96,12 +96,12 @@ class Eventstream:
     def __len__(self) -> int:
         return len(self.dataset)
 
-    def transform(self, filter: list[dict[str, Any]], action: dict[str, Any]) -> None:
+    def transform(self, mapping: list[dict[str, Any]], action: dict[str, Any]) -> None:
         """
         before: [{'field_name': '...', 'action': 'eq/neq/startswith', 'value': '...']],
         after:  ['field_name', 'value_name']
         """
-        mapping_rules = [MappingRule(**x) for x in filter]
+        mapping_rules = [MappingRule(**x) for x in mapping]
         for mapping_rule in mapping_rules:
             if mapping_rule.field_name not in self.source_schema:
                 raise ValueError(f"{mapping_rule.field_name} not in source_schema!")
@@ -140,11 +140,11 @@ class Eventstream:
         query = f'`{filter.field_name}` {actions[filter.action]} "{filter.value}"'
         return query
 
-    def remove_rows(self, before: list[dict[str, Any]]) -> "DataFrame":
-        filters = [MappingRule(**x) for x in before]
-        for filter in filters:
-            if filter.field_name not in self.source_schema:
-                raise ValueError(f"{filter.field_name} not in source_schema!")
+    def remove_rows(self, remove_rules: list[dict[str, Any]]) -> "DataFrame":
+        filters = [MappingRule(**x) for x in remove_rules]
+        for remove_rule in filters:
+            if remove_rule.field_name not in self.source_schema:
+                raise ValueError(f"{remove_rule.field_name} not in source_schema!")
 
         df = self._apply_filters(filters)
 
