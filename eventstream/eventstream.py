@@ -60,7 +60,8 @@ class Eventstream:
     def dataset(self, dataset: DataFrame) -> None:
         assert isinstance(dataset, DataFrame), TypeError("Pandas dataframe required")
         self._dataset = dataset
-        self._dataset = self._dataset.assign(event="")
+        if "event" not in self._dataset:
+            self._dataset = self._dataset.assign(event="")
 
     @property
     def source_schema(self) -> list[str]:
@@ -95,32 +96,31 @@ class Eventstream:
     def __len__(self) -> int:
         return len(self.dataset)
 
-    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> None:
+    def transform(self, filter: list[dict[str, Any]], action: dict[str, Any]) -> None:
         """
         before: [{'field_name': '...', 'action': 'eq/neq/startswith', 'value': '...']],
         after:  ['field_name', 'value_name']
         """
-        filters = [MappingRule(**x) for x in before]
-        for filter in filters:
-            if filter.field_name not in self.source_schema:
-                raise ValueError(f"{filter.field_name} not in source_schema!")
+        mapping_rules = [MappingRule(**x) for x in filter]
+        for mapping_rule in mapping_rules:
+            if mapping_rule.field_name not in self.source_schema:
+                raise ValueError(f"{mapping_rule.field_name} not in source_schema!")
 
-        result = MappingAction(**after)
-        if result.field_name not in self.schema:
-            raise ValueError(f"{result.field_name} not in source_schema!")
+        mapping_action = MappingAction(**action)
+        if mapping_action.field_name not in self.schema:
+            raise ValueError(f"{mapping_action.field_name} not in source_schema!")
 
-        df = self._apply_filters(filters, result)
-
+        df = self._apply_filters(filters=mapping_rules, action=mapping_action)
         self.dataset = df
 
-    def _apply_filters(self, filters: list[MappingRule], result: MappingAction | None = None) -> "DataFrame":
+    def _apply_filters(self, filters: list[MappingRule], action: MappingAction | None = None) -> "DataFrame":
         criterions = [self._build_criterions(filter) for filter in filters]
         base_filter = " and ".join([x for x in criterions])
-        print(base_filter)
         df = self.dataset.eval(base_filter)
 
-        if result:
-            df = self.dataset.loc[self.dataset.eval(base_filter), "event"] = result.value
+        if action:
+            self.dataset.loc[self.dataset.eval(base_filter), "event"] = action.value
+            return self.dataset
 
         return df
 
