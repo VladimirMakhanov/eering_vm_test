@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pandas as pd
 from pandas import DataFrame, Series
 
 
@@ -94,7 +95,7 @@ class Eventstream:
     def __len__(self) -> int:
         return len(self.dataset)
 
-    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> "DataFrame":
+    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> None:
         """
         before: [{'field_name': '...', 'action': 'eq/neq/startswith', 'value': '...']],
         after:  ['field_name', 'value_name']
@@ -110,7 +111,7 @@ class Eventstream:
 
         df = self._apply_filters(filters, result)
 
-        return df
+        self.dataset = df
 
     def _apply_filters(self, filters: list[MappingRule], result: MappingAction | None = None) -> "DataFrame":
         criterions = [self._build_criterions(filter) for filter in filters]
@@ -146,4 +147,12 @@ class Eventstream:
                 raise ValueError(f"{filter.field_name} not in source_schema!")
 
         df = self._apply_filters(filters)
-        return df
+
+        self._removed_from_dataset = self.dataset[df]
+        self.dataset = self.dataset[~df]
+
+    def restore_removed_rows(self) -> None:
+        self.dataset = pd.concat([self.dataset, self._removed_from_dataset], ignore_index=True)
+
+    def get_dataframe(self) -> "DataFrame":
+        return self.dataset[self.schema]
