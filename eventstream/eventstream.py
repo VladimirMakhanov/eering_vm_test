@@ -13,7 +13,7 @@ class MappingRule:
     value: Any
 
     def validate_action(self, action: str) -> str:
-        allowed_actions = ["eq", "neq", "startwith", "gt", "gte", "lt", "lte"]
+        allowed_actions = ["eq", "neq", "startswith", "gt", "gte", "lt", "lte"]
         if action not in allowed_actions:
             raise ValueError("Incorrect action: %s" % action)
         return action
@@ -26,7 +26,7 @@ class MappingRule:
             "lte",
         ]
         string_action = [
-            "startwith",
+            "startswith",
         ]
 
         if self.action in math_action and type(self.value) not in (int, float, complex):
@@ -94,9 +94,9 @@ class Eventstream:
     def __len__(self) -> int:
         return len(self.dataset)
 
-    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> None:
+    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> "DataFrame":
         """
-        before: [{'field_name': '...', 'action': 'eq/neq/startwith', 'value': '...']],
+        before: [{'field_name': '...', 'action': 'eq/neq/startswith', 'value': '...']],
         after:  ['field_name', 'value_name']
         """
         filters = [MappingRule(**x) for x in before]
@@ -105,29 +105,27 @@ class Eventstream:
                 raise ValueError(f"{filter.field_name} not in source_schema!")
 
         result = MappingAction(**after)
-        if result.field_name not in self.source_schema:
+        if result.field_name not in self.schema:
             raise ValueError(f"{result.field_name} not in source_schema!")
 
         df = self._apply_filters(filters, result)
 
-        self.dataset = df
+        return df
 
     def _apply_filters(self, filters: list[MappingRule], result: MappingAction | None = None) -> "DataFrame":
         criterions = [self._build_criterions(filter) for filter in filters]
-        base_filter = " and ".join([x for x in criterions if isinstance(x, str)])
-        df = self.dataset.query(base_filter)
-        map_criterions = [x for x in criterions if not isinstance(x, str)]
-        for map_criteria in map_criterions:
-            df = df[map_criteria]
+        base_filter = " and ".join([x for x in criterions])
+        print(base_filter)
+        df = self.dataset.eval(base_filter)
 
         if result:
-            df[result.field_name] = result.value
+            df = self.dataset.loc[self.dataset.eval(base_filter), "event"] = result.value
 
         return df
 
     def _build_criterions(self, filter: MappingRule) -> str | Series:
-        if filter.action == "startwith":
-            criterion = self.dataset[filter.field_name].map(lambda x: x.startwith(filter.value))
+        if filter.action == "startswith":
+            criterion = f'@self.dataset["{filter.field_name}"].str.startswith("{filter.value}")'
             return criterion
 
         actions = {
@@ -138,7 +136,7 @@ class Eventstream:
             "lt": "<",
             "lte": "<=",
         }
-        query = f"{filter.field_name} {actions[filter.action]} {filter.value}"
+        query = f'`{filter.field_name}` {actions[filter.action]} "{filter.value}"'
         return query
 
     def remove_rows(self, before: list[dict[str, Any]]) -> "DataFrame":
