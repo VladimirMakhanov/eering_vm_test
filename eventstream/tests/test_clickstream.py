@@ -8,7 +8,6 @@ class TestCreateClickstream:
 
     def test_create_clickstream_50_rows(self) -> None:
         stream = generate_clickstream(rows=50)
-        print(stream)
         assert len(stream) == 50
 
     def test_create_clickstream_0_rows(self) -> None:

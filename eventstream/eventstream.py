@@ -1,10 +1,52 @@
-from pandas import DataFrame
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from pandas import DataFrame, Series
+
+
+@dataclass
+class MappingRule:
+    field_name: str
+    action: str
+    value: Any
+
+    def validate_action(self, action: str) -> str:
+        allowed_actions = ["eq", "neq", "startwith", "gt", "gte", "lt", "lte"]
+        if action not in allowed_actions:
+            raise ValueError("Incorrect action: %s" % action)
+        return action
+
+    def __post_init__(self) -> None:
+        math_action = [
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+        ]
+        string_action = [
+            "startwith",
+        ]
+
+        if self.action in math_action and type(self.value) not in (int, float, complex):
+            raise ValueError("Math action required math type")
+
+        if self.action in string_action and type(self.value) not in (str,):
+            raise ValueError("String action required string")
+
+
+@dataclass
+class MappingAction:
+    field_name: str
+    value: Any
 
 
 class Eventstream:
     _dataset: DataFrame
     _source_schema: list[str]
     _schema: list[str]
+    _removed_from_dataset: DataFrame
 
     __source_schema_required_fields: list[str] = ["event_timestamp", "user_id", "event_name"]
     __schema_required_fields: list[str] = ["event_timestamp", "user_id", "event"]
@@ -17,6 +59,7 @@ class Eventstream:
     def dataset(self, dataset: DataFrame) -> None:
         assert isinstance(dataset, DataFrame), TypeError("Pandas dataframe required")
         self._dataset = dataset
+        self._dataset = self._dataset.assign(event="")
 
     @property
     def source_schema(self) -> list[str]:
@@ -50,3 +93,59 @@ class Eventstream:
 
     def __len__(self) -> int:
         return len(self.dataset)
+
+    def transform(self, before: list[dict[str, Any]], after: dict[str, Any]) -> None:
+        """
+        before: [{'field_name': '...', 'action': 'eq/neq/startwith', 'value': '...']],
+        after:  ['field_name', 'value_name']
+        """
+        filters = [MappingRule(**x) for x in before]
+        for filter in filters:
+            if filter.field_name not in self.source_schema:
+                raise ValueError(f"{filter.field_name} not in source_schema!")
+
+        result = MappingAction(**after)
+        if result.field_name not in self.source_schema:
+            raise ValueError(f"{result.field_name} not in source_schema!")
+
+        df = self._apply_filters(filters, result)
+
+        self.dataset = df
+
+    def _apply_filters(self, filters: list[MappingRule], result: MappingAction | None = None) -> "DataFrame":
+        criterions = [self._build_criterions(filter) for filter in filters]
+        base_filter = " and ".join([x for x in criterions if isinstance(x, str)])
+        df = self.dataset.query(base_filter)
+        map_criterions = [x for x in criterions if not isinstance(x, str)]
+        for map_criteria in map_criterions:
+            df = df[map_criteria]
+
+        if result:
+            df[result.field_name] = result.value
+
+        return df
+
+    def _build_criterions(self, filter: MappingRule) -> str | Series:
+        if filter.action == "startwith":
+            criterion = self.dataset[filter.field_name].map(lambda x: x.startwith(filter.value))
+            return criterion
+
+        actions = {
+            "eq": "==",
+            "neq": "!=",
+            "gt": ">",
+            "gte": ">=",
+            "lt": "<",
+            "lte": "<=",
+        }
+        query = f"{filter.field_name} {actions[filter.action]} {filter.value}"
+        return query
+
+    def remove_rows(self, before: list[dict[str, Any]]) -> "DataFrame":
+        filters = [MappingRule(**x) for x in before]
+        for filter in filters:
+            if filter.field_name not in self.source_schema:
+                raise ValueError(f"{filter.field_name} not in source_schema!")
+
+        df = self._apply_filters(filters)
+        return df

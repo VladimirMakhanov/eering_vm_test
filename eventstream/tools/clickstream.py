@@ -39,7 +39,6 @@ def _generate_clickstream_row() -> dict:
 
 def generate_clickstream(rows: int = 50) -> "DataFrame":
     sample_data = [_generate_clickstream_row() for _ in range(rows)]
-    print(sample_data)
     df = pd.DataFrame(
         data=sample_data,
     )
