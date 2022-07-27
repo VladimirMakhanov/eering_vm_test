@@ -1,4 +1,4 @@
-from eventstream.tools.clickstream import generate_clickstream
+from tests.tools.clickstream import generate_clickstream
 
 
 class TestCreateClickstream:

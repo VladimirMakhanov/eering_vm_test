@@ -23,7 +23,8 @@ class Eventstream:
 
     @dataset.setter
     def dataset(self, dataset: DataFrame) -> None:
-        assert isinstance(dataset, DataFrame), TypeError("Pandas dataframe required")
+        if not isinstance(dataset, DataFrame):
+            raise TypeError("Pandas dataframe required")
         self._dataset = dataset
         if "event" not in self._dataset:
             self._dataset = self._dataset.assign(event="")
@@ -34,8 +35,10 @@ class Eventstream:
 
     @source_schema.setter
     def source_schema(self, source_schema: list[str]) -> None:
-        assert isinstance(source_schema, list), TypeError("source_schema must be a list")
-        assert all([True if x in source_schema else False for x in self.__source_schema_required_fields])
+        if not isinstance(source_schema, list):
+            raise TypeError("source_schema must be a list")
+        if not all([(x in source_schema) for x in self.__source_schema_required_fields]):
+            raise ValueError("Not all source fields found")
         self._source_schema = source_schema
 
     @property
@@ -44,8 +47,10 @@ class Eventstream:
 
     @schema.setter
     def schema(self, schema: list[str]) -> None:
-        assert isinstance(schema, list), TypeError("schema must be a list")
-        assert all([True if x in schema else False for x in self.__schema_required_fields])
+        if not isinstance(schema, list):
+            raise TypeError("schema must be a list")
+        if not all([(x in schema) for x in self.__schema_required_fields]):
+            raise ValueError("Not all result fields found")
         self._schema = schema
 
     def __init__(
@@ -83,7 +88,7 @@ class Eventstream:
         base_filter = " and ".join([x for x in criterions])
         df = self.dataset.eval(base_filter)
 
-        if action:
+        if action is not None:
             self.dataset.loc[self.dataset.eval(base_filter), "event"] = action.value
             return self.dataset
 
